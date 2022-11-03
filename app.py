@@ -68,7 +68,7 @@ def show_plots():
     ).properties(title=txt.fig3_title.format(cn.scenario_dict[scenario]))
     st.altair_chart(plot, use_container_width=True)
 
-    plot = alt.Chart(population.self.vacc_data_melted).mark_line().encode(
+    plot = alt.Chart(population.vacc_data_melted).mark_line().encode(
         x = alt.X('datum:T', axis = alt.Axis(title = 'Datum', 
             format = ("%m %Y"),
             labelAngle=45)
