@@ -23,9 +23,6 @@ APP_INFO = f"""<div style="background-color:powderblue; padding: 10px;border-rad
     <a href="{GIT_REPO}">git-repo</a>
     """
 
-days = list(range(0, cn.no_days))
-
-
 def show_texts():
     st.markdown(txt.beschreibung)
     st.markdown(txt.methodik)
@@ -107,7 +104,6 @@ if (menu_options.index(sel_menu) == 0) & (len(population.stats) >0):
 else:
     show_texts()
 st.sidebar.markdown(APP_INFO, unsafe_allow_html=True)
-# sel_day = st.sidebar.slider("Day", min_value=0, max_value = len(days))
 
 
 
