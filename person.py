@@ -53,7 +53,7 @@ class Population():
         self.population = self.init_population()
         # used in first trial, where a coordinate was assigned to each person
         # self.population_df = self.init_population_df()
-        self.status = pd.DataFrame()
+        self.history = pd.DataFrame()
         self.infection_data = self.get_infections()
         self.vacc_data, self.vacc_data_melted = self.get_vaccinations()
         self.stats_file = f'./vacc_stats_{scenario}.csv'
@@ -106,14 +106,14 @@ class Population():
         st.success('Vaccination data was initialized')
 
 
-    def get_data(self):
+    def get_history(self):
         """data with day, personid per row. used to generate the aggregated file"""
         if path.exists(self.history_file):
             """"reads the data from data.bs"""
-            # df = pd.read_csv('status.csv')
             df = pd.read_pickle(self.history_file)
-            type_dict = {'day':'int32', 'person_id':'int32', 'status':'int32', 'date':'datetime64'}
-            #df = self.status.astype(type_dict)
+            #type_dict = {'day':'timedelta', 'person_id':'int32', 'status':'int32', 'date':'datetime64'}
+            #df = df.astype(type_dict)
+            #convert timedelta to days, otherweise groupby does not work
             return df
 
 
@@ -150,12 +150,12 @@ class Population():
         return [p.y for p in self.population]
     
     def aggregate_data(self, scenario):
-        df = self.get_data()
+        df = self.get_history()
         df = df.groupby(['day', 'status']).count().reset_index()
         df.columns = ['day', 'status', 'count']
         df['first_day'] = cn.first_day
         df['first_day'] = pd.to_datetime(df['first_day'])
-        df['day'] = pd.to_timedelta(df['day'],'d')
+        df['day'] = pd.to_timedelta(df['day'], 'd')
         df['date'] = df['first_day'] + df['day']
         df['status'] = df['status'].replace(
             to_replace=[0,1,2,3,4,5], 
@@ -163,7 +163,7 @@ class Population():
 
         df.to_csv(self.stats_file, index=False)
         return df
-        
+
 
     def create_history(self, scenario):
         def read_data():
@@ -220,7 +220,7 @@ class Population():
             fact = len(filtered_list_no_vacc) / cn.POPULATION_BS
 
             num_non_vacc = int(fact * row['faelle_bs'])
-            num_vacc = int((row['faelle_bs'] - num_non_vacc) * 0.2) # make it 4 times more likely for non vacc persons to be infected than non vacc
+            num_vacc = int((row['faelle_bs'] - num_non_vacc) * 0.2) # make it 5 times more likely for non vacc persons to be infected than non vacc
             num_non_vacc = row['faelle_bs'] - num_vacc
             # st.write( {'vaccinated': len(filtered_list_vaccinated), 'fact': fact, 'all': row['faelle_bs'], 'vaccinated': num_vacc, 'non_vacc': num_non_vacc})
 
@@ -253,16 +253,18 @@ class Population():
                 'person_id': [p.id for p in self.population],
                 'status': [p.status for p in self.population]}
             )
-            self.status = pd.concat([self.status, _df], ignore_index=True)
+            self.history = pd.concat([self.history, _df], ignore_index=True)
 
         self.data = read_data()
         for index, row in self.data.iterrows():
             day = (row['vacc_date'] - cn.first_day).days
             with placeholder.container():
-                st.write(f"{row['vacc_date']}, day: {day}: memory: {int(self.status.memory_usage().sum() / (1024**2))} MB")
+                st.write(f"{row['vacc_date']}, day: {day}: memory: {int(self.history.memory_usage().sum() / (1024**2))} MB")
             sim_day(day, row)
+            #if day > 20:
+            #    break
         st.info("Writing results to file")
-        self.status.to_pickle(self.history_file)
+        self.history.to_pickle(self.history_file)
         st.success(f"All results have been saved to '{self.history_file}'")
         
 

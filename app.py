@@ -81,8 +81,14 @@ def show_plots():
     st.image('./vacc_data_legend.png')
 
 def show_prepare_data_buttons(scenario):
-    if st.sidebar.button('generate_history'):
+    if st.sidebar.button('generate_history current Scenario'):
         population.create_history(scenario)
+        population.status = population.aggregate_data(scenario)
+    if st.sidebar.button('generate_history all'):
+        for s in cn.scenario_dict:
+            st.info(s)
+            population.create_history(s)
+            population.status = population.aggregate_data(s)
     if st.sidebar.button('init data'):
         population.sim_data()
     if st.sidebar.button('calc Status'):
