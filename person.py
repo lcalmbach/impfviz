@@ -13,17 +13,35 @@ import const as cn
 placeholder = st.empty()
 
 class Person():
-    def __init__(self, id):
+    def __init__(self, id:int):
+        """Initializes a person with a vaccination state, id and daten when 
+        last vaccinated or infected.
+
+        Args:
+            id (int): _description_
+        """
         self.id = id
         self.status = 0
         self.last_status_date = 0
         
-    def update_status(self, day):
+    def update_status(self, day:int):
+        """update the person status to expired if last status date
+        is greater than the expiry duration of the current scenario.
+
+        Args:
+            day (int): current day since start of pandemic
+        """
         if (day - self.last_status_date > cn.effective_days):
             self.status = cn.vacc_expired
             self.last_status_date = day
 
-    def vaccinate(self, day):
+    def vaccinate(self, day:int):
+        """Person gets a vaccination and changes state based on his previous status. e.g. when status
+        was no_vacc then new status is: first_vacc. last_status_date changes to today.
+
+        Args:
+            day (int): current day since start of pandemic
+        """
         if self.status == cn.no_vacc:
             self.status = cn.part_vacc
         elif self.status == cn.vacc_expired:
@@ -47,7 +65,13 @@ class Person():
         return f"Person: {self.id}, last_status_date: {self.last_status_date} status: {self.status}"
 
 class Population():
-    def __init__(self, n, scenario):
+    def __init__(self, n:int, scenario:str):
+        """Initializes the population of basel with 200k items of type person
+
+        Args:
+            n (int): _description_
+            scenario (str): 6, 8 or 12month scenario
+        """
         self.scenario = scenario
         self.total = n
         self.population = self.init_population()
@@ -66,9 +90,14 @@ class Population():
         s = requests.get(url).content
         df = pd.read_csv(io.StringIO(s.decode('utf-8')), sep=';')
         df['vacc_day'] = pd.to_datetime(df['vacc_day'])
-        
+        # add empty record on first day so date axis in diagrams plot correctly
+        _df = pd.DataFrame({'vacc_day':[cn.first_day], 'vollstaendig_geimpft':[0]})
+        df = pd.concat([_df, df], ignore_index=True)
+        df = df.fillna(0)
+
         fields = ['vacc_day', 'vollstaendig_geimpft', 'teilweise_geimpft', 'impfung_aufgefrischt', 'mit_mindestens_einer_dosis_geimpft']
         df_melted = df[fields]
+        
         del fields[0]
         df_melted = pd.melt(df, id_vars=['vacc_day'], value_vars=fields)
         df_melted.columns = ['datum', 'status', 'anzahl']

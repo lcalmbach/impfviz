@@ -4,15 +4,15 @@ import pandas as pd
 import socket
 import altair as alt
 import texts as txt
-
+from datetime import datetime
 
 from person import Population
 import const as cn
 
-__version__ = '0.0.2' 
+__version__ = '0.0.3' 
 __author__ = 'Lukas Calmbach'
 __author_email__ = 'lcalmbach@gmail.com'
-VERSION_DATE = '2022-11-03'
+VERSION_DATE = '2022-11-06'
 my_name = '💉Impfviz-bs'
 GIT_REPO = 'https://github.com/lcalmbach/impfviz'
 
@@ -27,8 +27,11 @@ def show_texts():
     st.markdown(txt.beschreibung)
     st.markdown(txt.methodik)
 
-def show_plots():
-    
+def show_dashboard():
+    """shows the plots in the main content area.
+    """
+    st.markdown("### Impfdashboard-BS")
+    st.markdown(txt.text_dashboard.format(cn.scenario_dict[scenario]), unsafe_allow_html=True)
     plot = alt.Chart(population.stats).mark_area().encode(
         x = alt.X('date:T', axis = alt.Axis(title = 'Datum', 
             format = ("%m %Y"),
@@ -80,6 +83,25 @@ def show_plots():
     st.altair_chart(plot, use_container_width=True)
     st.image('./vacc_data_legend.png')
 
+    fields = ['vacc_day', 'neu_teilweise_geimpft', 'neu_vollstaendig_geimpft', 'neu_impfung_aufgefrischt']
+    df = population.vacc_data[fields]
+    df['anzahl']= df['neu_teilweise_geimpft'] + df['neu_vollstaendig_geimpft'] + df['neu_impfung_aufgefrischt']
+    df = df.rename(columns={'vacc_day': 'datum'})[['datum', 'anzahl']]
+    
+    #force time axis scale to start with first day use scale. 
+    #domain = list(pd.to_datetime([cn.first_day, datetime.now().date()]).astype(int) / 10 ** 6)
+    plot = alt.Chart(df).mark_bar(width=1).encode(
+        x = alt.X('datum:T', 
+            axis=alt.Axis(title = 'Datum', format = ("%m %Y"), labelAngle=45)
+            #,scale=alt.Scale(domain=domain),
+        ),
+        y = alt.Y("anzahl:Q", title='Anzahl Personen'),
+        tooltip = alt.Tooltip(['datum:T', 'anzahl'])
+    ).properties(title=txt.fig5_title)
+    st.altair_chart(plot, use_container_width=True)
+
+
+
 def show_prepare_data_buttons(scenario):
     if st.sidebar.button('generate_history current Scenario'):
         population.create_history(scenario)
@@ -106,7 +128,7 @@ if socket.gethostname().lower() in cn.DEVELOPER_MACHINES:
 menu_options = ['Grafik','Methodik']
 sel_menu = st.sidebar.selectbox("Auswahl", options=menu_options)
 if (menu_options.index(sel_menu) == 0) & (len(population.stats) >0):
-    show_plots()
+    show_dashboard()
 else:
     show_texts()
 st.sidebar.markdown(APP_INFO, unsafe_allow_html=True)

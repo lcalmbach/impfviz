@@ -8,7 +8,6 @@ full_vacc = 3
 booster_vacc = 4
 infection_vacc = 5
 POPULATION_BS = 196735
-
 vacc_effective_days = {'6M': int(365/12*6), '8M':int(365/12*8), '1Y': 365}
 scenario_dict = {'6M': '6 Monate', '8M': '8 Monate', '1Y': '1 Jahr'}
 url_infections = "https://data.bs.ch/explore/dataset/100108/download/?format=csv&timezone=Europe/Berlin&lang=de&use_labels_for_header=false&csv_separator=%3B"
