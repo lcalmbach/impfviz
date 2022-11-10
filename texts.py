@@ -20,7 +20,7 @@ fig4_title = "Kumulierte Impfzahlen Kanton Basel-Stadt"
 fig5_title = "Total Impfungen pro Tag Kanton Basel-Stadt"
 
 fig1_legend = {
-        '1Y': """Die Impfkampagne beginnt im Januar 2021 und die Erstgeimpften erreichen einen Peak im Juni 2021. Die Zahl der Erstgeimpften reduziert sich durch die Zweitimpfung, welche in der Regel 2 Wochen auf die Erstimpfung erfolgt. Im Nomvember 2020 erfolgen die ersten Auffrischimpfung von Vollständig geimpften, welche dadurch den Status Auffrischimpfung annehmen. Diese erreicht im Januar 2022 ihren Peak. Die Impfung durch Infektion erfolgt hauptsächlich während der Pandemie-Wellen. 
+        '1Y': """Die Impfkampagne beginnt im Januar 2021 und die Erstgeimpften erreichen einen Peak im Juni 2021. Die Zahl der Erstgeimpften reduziert sich durch die Zweitimpfung, welche in der Regel 2 Wochen auf die Erstimpfung erfolgt. Im November 2020 erfolgen die ersten Auffrischimpfungen von Vollständig geimpften, welche dadurch den Status Auffrischimpfung annehmen. Diese erreicht im Januar 2022 ihren Peak. Die Impfung durch Infektion erfolgt hauptsächlich während der Pandemie-Wellen. 
             """, 
         '6M':"""
         """
