@@ -21,12 +21,32 @@ class Person():
             id (int): _description_
         """
         self.id = id
-        self.status = 0
+        self.immunity_score = 0 # 0 - 100
+        self.number_of_vaccinations = 0
+        self.number_of_infections = 0
         self.last_status_date = 0
+        self.status = 0
+        self.age_gte_65 = False
+
         
+    def update_immunity_score(self, day:int):
+        # increase or decrease immunity: if person is infected then set to 100, if person is vaccinated < 14 days ago, increase to 100 
+        # until day 14, if vaccination of infection is < 6M ago, decrease by waning factor (40% in 6 Months) if infection is > 6M ago
+        # decrease by 20% in 24 months
+        
+        if (day - self.last_status_date <= cn.peak_imm_after_first_vacc) and (self.status == cn.full_vacc):
+            self.immunity_score += (100 / 14)
+        elif (day - self.last_status_date > cn.vacc_effective_days):
+            self.immunity_score -= cn.wane_factor2
+        elif (day - self.last_status_date <= cn.vacc_effective_days):
+            self.immunity_score -= cn.wane_factor1
+        else:
+            print(day, self.last_status_date, self.status)
+
+
     def update_status(self, day:int):
         """update the person status to expired if last status date
-        is greater than the expiry duration of the current scenario.
+        is greater than the expiry duration of the vacc_effective_days period.
 
         Args:
             day (int): current day since start of pandemic
@@ -35,26 +55,27 @@ class Person():
             self.status = cn.vacc_expired
             self.last_status_date = day
 
-    def vaccinate(self, day:int):
+    def vaccinate(self, day:int, sequence):
         """Person gets a vaccination and changes state based on his previous status. e.g. when status
         was no_vacc then new status is: first_vacc. last_status_date changes to today.
 
         Args:
             day (int): current day since start of pandemic
         """
-        if self.status == cn.no_vacc:
+        if (self.status == cn.no_vacc) | (sequence == 1):
             self.status = cn.part_vacc
-        elif self.status == cn.vacc_expired:
+        elif (self.status in [cn.vacc_expired, cn.part_vacc, cn.infection_vacc]) | (sequence == 2):
             self.status = cn.full_vacc
-        elif self.status == cn.part_vacc:
-            self.status = cn.full_vacc
-        elif self.status == cn.full_vacc:
+        elif (self.status in [cn.full_vacc, cn.booster_vacc]) | (sequence > 2):
             self.status = cn.booster_vacc
+        self.number_of_vaccinations += 1
         self.last_status_date = day
     
     def infect(self, day):
         self.status = cn.infection_vacc
+        self.number_of_infections += 1
         self.last_status_date = day + cn.infection_duration
+        self.immunity_score = 100
 
     def reset_status(self, dt):
         if self.status != cn.no_vacc:
@@ -65,24 +86,31 @@ class Person():
         return f"Person: {self.id}, last_status_date: {self.last_status_date} status: {self.status}"
 
 class Population():
-    def __init__(self, n:int, scenario:str):
+    def __init__(self, n:int):
         """Initializes the population of basel with 200k items of type person
 
         Args:
             n (int): _description_
-            scenario (str): 6, 8 or 12month scenario
         """
-        self.scenario = scenario
         self.total = n
         self.population = self.init_population()
         # used in first trial, where a coordinate was assigned to each person
         # self.population_df = self.init_population_df()
         self.history = pd.DataFrame()
         self.infection_data = self.get_infections()
+        self.hospitalisation_data = self.get_hospitalisations()
+        self.death_data = self.get_deaths()
         self.vacc_data, self.vacc_data_melted = self.get_vaccinations()
-        self.stats_file = f'./vacc_stats_{scenario}.csv'
-        self.history_file = f'./status_{scenario}.pkl'
-        self.stats = self.get_stats()
+        self.stats_vacc_status_file = f'./vacc_stats.csv'
+        self.stats_protection_file = f'./protection_stats.csv'
+        self.history_file = f'./status.pkl'
+        self.stats = self.get_stats(self.stats_vacc_status_file)
+        self.protection_stats = self.get_stats(self.stats_protection_file)
+        # init population >= 65
+        pop_gte_65 = random.sample(self.population, cn.pop_gte_65)
+        for p in pop_gte_65:
+                p.age_gte_65 = True
+
 
     @st.experimental_memo
     def get_vaccinations(_self):
@@ -111,8 +139,32 @@ class Population():
         fields = ['test_datum', 'faelle_bs']
         df = df[fields]
         df['test_datum'] = pd.to_datetime(df['test_datum'])
+        # df = df.rename(columns={'test_datum':'datum'}) 
         return df
-        
+    
+    @st.experimental_memo
+    def get_hospitalisations(_self):
+        url=cn.url_hospitalisations
+        s=requests.get(url).content
+        df = pd.read_csv(io.StringIO(s.decode('utf-8')), sep=';')
+        fields = ['date', 'current_hosp_resident', 'current_icu']
+        df = df[fields]
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.rename(columns={'date':'datum'}) 
+        return df
+    
+    @st.experimental_memo
+    def get_deaths(_self):
+        url=cn.url_deaths
+        s=requests.get(url).content
+        df = pd.read_csv(io.StringIO(s.decode('utf-8')), sep=';')
+        fields = ['date', 'newdeaths']
+        df = df[fields]
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.groupby(['date']).sum().reset_index()
+        df.columns = ['datum','num_deaths']
+        return df
+
     def sim_data(self):
         """
         Generates a test dataset
@@ -140,21 +192,18 @@ class Population():
         if path.exists(self.history_file):
             """"reads the data from data.bs"""
             df = pd.read_pickle(self.history_file)
-            #type_dict = {'day':'timedelta', 'person_id':'int32', 'status':'int32', 'date':'datetime64'}
-            #df = df.astype(type_dict)
-            #convert timedelta to days, otherweise groupby does not work
             return df
 
 
-    def get_stats(self):
+    def get_stats(self, filename):
         """stats with day, status, count per row"""
-        if path.exists(self.stats_file):
+        if path.exists(filename):
             """"reads the data from data.bs"""
-            # df = pd.read_csv('status.csv')
-            df = pd.read_csv(self.stats_file)
+            df = pd.read_csv(filename)
             return df
         else:
             return pd.DataFrame()
+
 
     def init_population(self):
         pop = []
@@ -163,38 +212,53 @@ class Population():
             pop.append(p)
         return pop
 
-    def init_population_df(self):
-        df = pd.DataFrame({'person_id': list(range(1, self.total+1)), 
-            'x': [int(np.random.random() * 5000) for x in range(1, self.total+1)], 
-            'y': [int(np.random.random() * 5000) for x in range(1, self.total+1)]}
-        )
-        type_dict = {'person_id':'int32', 'x':'int32', 'y':'int32'}
-        return df.astype(type_dict)
+    # def init_population_df(self):
+    #     df = pd.DataFrame({'person_id': list(range(1, self.total+1)), 
+    #         'x': [int(np.random.random() * 5000) for x in range(1, self.total+1)], 
+    #         'y': [int(np.random.random() * 5000) for x in range(1, self.total+1)]}
+    #     )
+    #     type_dict = {'person_id':'int32', 'x':'int32', 'y':'int32'}
+    #     return df.astype(type_dict)
 
 
-    def x(self):
-        return [p.x for p in self.population]
+    # def x(self):
+    #     return [p.x for p in self.population]
     
-    def y(self):
-        return [p.y for p in self.population]
+    # def y(self):
+    #     return [p.y for p in self.population]
     
-    def aggregate_data(self, scenario):
+    def aggregate_data(self):
+        def assign_protection_state(_df):
+            _df['status'] = 'Kein Schutz'
+            _df.loc[_df['immunity_score'] > 20, 'status'] = 'Schutz gegen schwere Krankheit'
+            _df.loc[_df['immunity_score'] > 60, 'status'] = 'Schutz gegen Infektion'
+            return _df
+        
+        def add_date(_df):
+            _df['first_day'] = cn.first_day
+            _df['first_day'] = pd.to_datetime(_df['first_day'])
+            _df['day'] = pd.to_timedelta(_df['day'], 'd')
+            _df['date'] = _df['first_day'] + _df['day']
+            return _df
+
         df = self.get_history()
-        df = df.groupby(['day', 'status']).count().reset_index()
-        df.columns = ['day', 'status', 'count']
-        df['first_day'] = cn.first_day
-        df['first_day'] = pd.to_datetime(df['first_day'])
-        df['day'] = pd.to_timedelta(df['day'], 'd')
-        df['date'] = df['first_day'] + df['day']
-        df['status'] = df['status'].replace(
+        df_impf_status = df[['day', 'status','person_id']].groupby(['day', 'status']).count().reset_index()
+        df_impf_status.columns = ['day', 'status', 'count']
+        df_impf_status = add_date(df_impf_status)
+        df_impf_status['status'] = df_impf_status['status'].replace(
             to_replace=[0,1,2,3,4,5], 
-            value=['kein Impfschutz', 'Impfschutz abgelaufen', 'Partiell geimpft', 'Vollständig geimpft', 'Auffrischimpfung', 'durch Infektion geimpft'])
+            value=['keine Immunität', 'Impfschutz abgelaufen', 'Partiell geimpft', 'Grundimmunisiert', 'Auffrischimpfung', 'durch Infektion immunisiert'])
+        df_impf_status.to_csv(self.stats_vacc_status_file, index=False)
 
-        df.to_csv(self.stats_file, index=False)
-        return df
+        df = assign_protection_state(df)
+        df_protection_status = df[['day', 'status','person_id']].groupby(['day', 'status']).count().reset_index()
+        df_protection_status.columns = ['day', 'status', 'count']
+        df_protection_status = add_date(df_protection_status)
+        df_protection_status.to_csv(self.stats_protection_file, index=False)
+        return df_impf_status, df_protection_status
 
 
-    def create_history(self, scenario):
+    def create_history(self):
         def read_data():
             """"reads the data from data.bs"""
             fields = ['vacc_day','neu_teilweise_geimpft', 'neu_vollstaendig_geimpft', 'neu_impfung_aufgefrischt']
@@ -222,7 +286,7 @@ class Population():
                 num = len(filtered_list)
             random_elements = random.sample(filtered_list, num)
             for p in random_elements:
-                p.vaccinate(day)
+                p.vaccinate(day, 1)
 
             #fully vaccinated
             filtered_list = list(filter(lambda p: p.status == cn.part_vacc, self.population))
@@ -232,7 +296,7 @@ class Population():
                 num = len(filtered_list)
             random_elements = random.sample(filtered_list, num)
             for p in random_elements:
-                p.vaccinate(day)
+                p.vaccinate(day, 2)
             # booster
             filtered_list = list(filter(lambda p: p.status in [cn.full_vacc, cn.vacc_expired], self.population))
             if row['neu_impfung_aufgefrischt'] < len(filtered_list):
@@ -241,16 +305,19 @@ class Population():
                 num = len(filtered_list)
             random_elements = random.sample(filtered_list, num)
             for p in random_elements:
-                p.vaccinate(day)
+                p.vaccinate(day, 3)
 
             # infections
             filtered_list_vaccinated = list(filter(lambda p: p.status not in [cn.no_vacc, cn.vacc_expired], self.population))
             filtered_list_no_vacc = list(filter(lambda p: p.status in [cn.no_vacc, cn.vacc_expired], self.population))
+            # ratio of non vaccinated to total population
             fact = len(filtered_list_no_vacc) / cn.POPULATION_BS
 
-            num_non_vacc = int(fact * row['faelle_bs'])
-            num_vacc = int((row['faelle_bs'] - num_non_vacc) * 0.2) # make it 5 times more likely for non vacc persons to be infected than non vacc
-            num_non_vacc = row['faelle_bs'] - num_vacc
+            # takes into account dark figure of infections
+            infections = row['faelle_bs'] * cn.dark_figure_factor
+            num_non_vacc = int(fact * infections)
+            num_vacc = int((infections - num_non_vacc) * 0.2) # make it 5 times more likely for non vacc persons to be infected than non vacc
+            num_non_vacc = infections - num_vacc
             # st.write( {'vaccinated': len(filtered_list_vaccinated), 'fact': fact, 'all': row['faelle_bs'], 'vaccinated': num_vacc, 'non_vacc': num_non_vacc})
 
             if num_non_vacc < len(filtered_list_no_vacc):
@@ -272,15 +339,25 @@ class Population():
                 p.infect(day)
 
             # vaccination expired 
-            if day > cn.vacc_effective_days[scenario]:
-                expired_list = list(filter(lambda p: (((day - p.last_status_date) > cn.vacc_effective_days[scenario]) and (p.status not in [cn.no_vacc, cn.vacc_expired])), self.population))
+            if day > cn.vacc_effective_days:
+                expired_list = list(filter(lambda p: (((day - p.last_status_date) > cn.vacc_effective_days) and (p.status not in [cn.no_vacc, cn.vacc_expired])), self.population))
                 for p in expired_list:
                     p.reset_status(day)
             
+             # update immunity score
+            person_list = list(filter(lambda p: (p.number_of_vaccinations + p.number_of_infections) > 0, self.population))
+            for p in person_list:
+                p.update_immunity_score(day)
+
             # take all persons, transform them into records and collate to big result dataframe
-            _df = pd.DataFrame({'day': [day] * self.total, 
+            _df = pd.DataFrame(
+                {'day': [day] * self.total, 
                 'person_id': [p.id for p in self.population],
-                'status': [p.status for p in self.population]}
+                'status': [p.status for p in self.population],
+                'immunity_score': [p.immunity_score for p in self.population],
+                'number_of_vaccinations': [p.number_of_vaccinations for p in self.population],
+                'number_of_infections': [p.number_of_infections for p in self.population],
+                }
             )
             self.history = pd.concat([self.history, _df], ignore_index=True)
 
