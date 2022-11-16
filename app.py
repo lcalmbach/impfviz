@@ -9,7 +9,7 @@ from datetime import datetime
 from person import Population
 import const as cn
 
-__version__ = '0.0.3' 
+__version__ = '0.0.4' 
 __author__ = 'Lukas Calmbach'
 __author_email__ = 'lcalmbach@gmail.com'
 VERSION_DATE = '2022-11-06'
