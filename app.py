@@ -1,5 +1,4 @@
 import streamlit as st
-import numpy as np
 import pandas as pd
 import socket
 import altair as alt
@@ -9,10 +8,10 @@ from datetime import datetime
 from person import Population
 import const as cn
 
-__version__ = '0.0.4' 
+__version__ = '0.0.5' 
 __author__ = 'Lukas Calmbach'
 __author_email__ = 'lcalmbach@gmail.com'
-VERSION_DATE = '2022-11-06'
+VERSION_DATE = '2022-11-17'
 my_name = '💉Impfviz-bs'
 GIT_REPO = 'https://github.com/lcalmbach/impfviz'
 
@@ -27,43 +26,58 @@ def show_texts():
     st.markdown(txt.beschreibung)
     st.markdown(txt.methodik)
 
+def show_prepare_data_buttons():
+    """this option is only shown on developper machine
+    """
+
+    if st.sidebar.button('Simulation ausführen'):
+        population.create_history()
+        population.status = population.aggregate_data()
+    #if st.sidebar.button('init data'):
+    #    population.sim_data()
+    if st.sidebar.button('Statistik erstellen'):
+        population.aggregate_data()
+
 
 def show_dashboard(viz_type:int):
     """shows the plots in the main content area.
     """
-    def get_compare_plots():
+    def show_compare_plot_options():
         st.write("Vergleichsplots:")
-        compare_plots = ['Infektionen', 'Impfungen kumuliert', 'Total Impfungen', 'Hospitalisierte', 'Gestorbene',]
-        cols = st.columns(5)
+        compare_plots = [ 'Schutz (Fläche)', 'Schutz(Linien)', 'Infektionen', 'Impfungen kumuliert', 'Total Impfungen', 'Hospitalisierte', 'Gestorbene',]
+        cols = st.columns(3)
         i = 0
-        show_flags = [True] * 5
+        ci = 0
+        show_flags = [True] * 7
         for p in compare_plots:
-            with cols[i]:
+            with cols[ci]:
                 show_flags[i] = st.checkbox(p, value = show_flags[i])
             i += 1
+            ci = (ci + 1) % len(cols)
+        if not(show_flags[0] ) and not(show_flags[1]):
+            show_flags[0]=True
         return show_flags
     
-    def show_main_plots(df, legend_file):
+    def show_area_plot():
         field = 'status'
+        df = population.stats if viz_type == 0 else population.protection_stats
         plot = alt.Chart(df).mark_area().encode(
             x = alt.X('date:T', axis = alt.Axis(title = 'Datum', 
                 format = ("%m %Y"),
                 labelAngle=45)
             ),
             y = alt.Y("count:Q", title='Anzahl Personen'),
-            color = alt.Color(field),
+            color = alt.Color(field, legend=None),
             order = alt.Order(field, sort='ascending'),
             tooltip = alt.Tooltip(['date:T', field, 'count']),
         ).properties(height = 400, title=txt.fig1_title[viz_type])
         plot = plot.configure_range(category=alt.RangeScheme(colors))
         st.altair_chart(plot, use_container_width=True)
 
-        st.image(legend_file)
-        #with st.expander('Legend Fig 1'):
-        #    st.markdown(txt.fig1_legend[scenario])
-
-        # line diagram simulation
-        plot = alt.Chart(df).mark_line().encode(
+    def show_line_plot():
+        field = 'status'
+        df = population.stats if viz_type == 0 else population.protection_stats
+        plot = alt.Chart(population.protection_stats).mark_line().encode(
             x = alt.X('date:T', axis = alt.Axis(title = 'Datum', 
                 format = ("%m %Y"),
                 labelAngle=45)
@@ -78,19 +92,7 @@ def show_dashboard(viz_type:int):
         #with st.expander('Legend Fig 2'):
         #    st.markdown(txt.fig2_legend[scenario])
 
-    st.markdown("### Impfdashboard-BS")
-    st.markdown(txt.text_dashboard, unsafe_allow_html=True)
-    show_plot_flags = get_compare_plots()
-    st.write('')
-    # area diagram simulation
-    colors = ['#BFD7ED','#60A3D9','#0074B7', '#003B73', 'orange', 'silver']
-    
-    if viz_type == 0:
-        show_main_plots(population.stats, 'vacc_sim_legend.png')
-    else:
-        show_main_plots(population.protection_stats, 'protection_legend.png')
-
-    if show_plot_flags[0]:
+    def show_cases_plot():
         plot = alt.Chart(population.infection_data).mark_bar(width = 2).encode(
             x = alt.X('test_datum:T', axis = alt.Axis(title = 'Datum', 
                 format = ("%m %Y"),
@@ -100,8 +102,9 @@ def show_dashboard(viz_type:int):
             tooltip = alt.Tooltip(['test_datum:T', 'faelle_bs'])
         ).properties(title=txt.fig3_title)
         st.altair_chart(plot, use_container_width=True)
-    
-    if show_plot_flags[1]:
+
+    def show_vaccinations_cumulated():
+        st.image('./vacc_data_legend.png')
         plot = alt.Chart(population.vacc_data_melted).mark_line().encode(
             x = alt.X('datum:T', axis = alt.Axis(title = 'Datum', 
                 format = ("%m %Y"),
@@ -112,10 +115,8 @@ def show_dashboard(viz_type:int):
             tooltip = alt.Tooltip(['datum:T', 'anzahl'])
         ).properties(title=txt.fig4_title)
         st.altair_chart(plot, use_container_width=True)
-        st.image('./vacc_data_legend.png')
-
-
-    if show_plot_flags[2]:
+        
+    def show_vaccinations():
         fields = ['vacc_day', 'neu_teilweise_geimpft', 'neu_vollstaendig_geimpft', 'neu_impfung_aufgefrischt']
         df = population.vacc_data[fields]
         df['anzahl']= df['neu_teilweise_geimpft'] + df['neu_vollstaendig_geimpft'] + df['neu_impfung_aufgefrischt']
@@ -132,8 +133,8 @@ def show_dashboard(viz_type:int):
             tooltip = alt.Tooltip(['datum:T', 'anzahl'])
         ).properties(title=txt.fig5_title)
         st.altair_chart(plot, use_container_width=True)
-
-    if show_plot_flags[3]:
+    
+    def show_hospitalisations():
         df = population.hospitalisation_data
         plot = alt.Chart(df).mark_bar(width=1).encode(
             x = alt.X('datum:T', 
@@ -144,8 +145,7 @@ def show_dashboard(viz_type:int):
             tooltip = alt.Tooltip(['datum:T', 'current_hosp_resident'])
         ).properties(title=txt.fig6_title)
         st.altair_chart(plot, use_container_width=True)
-
-    if show_plot_flags[3]:
+    def show_deaths():
         df = population.death_data
         plot = alt.Chart(df).mark_bar(width=1).encode(
             x = alt.X('datum:T', 
@@ -157,15 +157,33 @@ def show_dashboard(viz_type:int):
         ).properties(title=txt.fig7_title)
         st.altair_chart(plot, use_container_width=True)
 
+    # start
+    st.markdown("### Impfdashboard-BS")
+    st.markdown(txt.text_dashboard, unsafe_allow_html=True)
+    show_plot_flags = show_compare_plot_options()
+    st.write('')
+    # area diagram simulation
+    colors = ['#BFD7ED','#60A3D9','#0074B7', '#003B73', 'orange', 'silver']
+    if viz_type == 0:
+        st.image('vacc_sim_legend.png')
+    else:
+        st.image('protection_legend.png')
 
-def show_prepare_data_buttons():
-    if st.sidebar.button('Simulation ausführen'):
-        population.create_history()
-        population.status = population.aggregate_data()
-    #if st.sidebar.button('init data'):
-    #    population.sim_data()
-    if st.sidebar.button('Statistik erstellen'):
-        population.aggregate_data()
+    if show_plot_flags[0]:
+        show_area_plot()
+    if show_plot_flags[1]:
+        show_line_plot()
+    if show_plot_flags[2]:
+        show_cases_plot()
+    if show_plot_flags[3]:
+        show_vaccinations_cumulated()
+    if show_plot_flags[4]:
+        show_vaccinations()
+    if show_plot_flags[5]:
+        show_hospitalisations()
+    if show_plot_flags[6]:
+        show_deaths()
+
 
 # Start
 
