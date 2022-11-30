@@ -8,10 +8,10 @@ from datetime import datetime
 from person import Population
 import const as cn
 
-__version__ = '0.0.5' 
+__version__ = '0.0.6'
 __author__ = 'Lukas Calmbach'
 __author_email__ = 'lcalmbach@gmail.com'
-VERSION_DATE = '2022-11-17'
+VERSION_DATE = '2022-11-30'
 my_name = '💉Impfviz-bs'
 GIT_REPO = 'https://github.com/lcalmbach/impfviz'
 
@@ -71,13 +71,13 @@ def show_dashboard(viz_type:int):
             order = alt.Order(field, sort='ascending'),
             tooltip = alt.Tooltip(['date:T', field, 'count']),
         ).properties(height = 400, title=txt.fig1_title[viz_type])
-        plot = plot.configure_range(category=alt.RangeScheme(colors))
+        plot = plot.configure_range(category=alt.RangeScheme(cn.colors))
         st.altair_chart(plot, use_container_width=True)
 
     def show_line_plot():
         field = 'status'
         df = population.stats if viz_type == 0 else population.protection_stats
-        plot = alt.Chart(population.protection_stats).mark_line().encode(
+        plot = alt.Chart(df).mark_line().encode(
             x = alt.X('date:T', axis = alt.Axis(title = 'Datum', 
                 format = ("%m %Y"),
                 labelAngle=45)
@@ -87,7 +87,7 @@ def show_dashboard(viz_type:int):
             order=alt.Order(field, sort='ascending'),
             tooltip = alt.Tooltip(['date:T', field, 'count'])
         ).properties(title=txt.fig2_title[viz_type])
-        plot = plot.configure_range(category=alt.RangeScheme(colors))
+        plot = plot.configure_range(category=alt.RangeScheme(cn.colors))
         st.altair_chart(plot, use_container_width=True)
         #with st.expander('Legend Fig 2'):
         #    st.markdown(txt.fig2_legend[scenario])
@@ -163,7 +163,7 @@ def show_dashboard(viz_type:int):
     show_plot_flags = show_compare_plot_options()
     st.write('')
     # area diagram simulation
-    colors = ['#BFD7ED','#60A3D9','#0074B7', '#003B73', 'orange', 'silver']
+    
     if viz_type == 0:
         st.image('vacc_sim_legend.png')
     else:

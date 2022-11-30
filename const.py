@@ -27,3 +27,4 @@ vacc_effective_days = int(365 / 12 * vacc_effective_months)
 wane_factor1 = 40 / vacc_effective_days # 40% decrease in 6 months
 wane_factor2 = 20 /  int(365 / 12 * 24) # 20% decrease in 24 months: after 6 months immunity decreases more slowly to 40%
 peak_imm_after_first_vacc = 14
+colors = ['#BFD7ED','#60A3D9','#0074B7', '#003B73', 'orange', 'silver']
